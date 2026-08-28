@@ -30,6 +30,10 @@ class Board{
     int game_status;
     Hash board_hash;
     std::mt19937_64 rng{std::random_device{}()};
+#ifdef BOARD_TESTING
+    std::size_t search_nodes = 0;
+    std::size_t closed_window_nodes = 0;
+#endif
 
 public:
     Board(){
@@ -310,7 +314,11 @@ public:
         board_hash ^= move_left_hash[move_left];
     }
 
-    auto negamax(int move_remaining, int depth){
+    auto negamax(int move_remaining, int depth, int alpha = NEGINF, int beta = INF){
+#ifdef BOARD_TESTING
+        ++search_nodes;
+        if(alpha >= beta) ++closed_window_nodes;
+#endif
         if(move_remaining == 2 && depth >= 30) return board_eval();
         if(check_game_ended()) return board_eval();
 
@@ -318,29 +326,34 @@ public:
 
         for(auto& x: current_board){
             for(auto& y: x){
-                auto& get_move_pattern = (y == 1) ? pawn_move_pattern[y] : move_pattern[y];
+                auto& get_move_pattern = (std::abs(y) == 1) ? pawn_move_pattern[y] : move_pattern[y];
                 for(auto& move: get_move_pattern){
                     int new_x = (&x - &current_board[0]) + move.first;
                     int new_y = (&y - &x[0]) + move.second;
                     if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
                         if(current_board[new_x][new_y] != 0) continue;
                         make_move(&x - &current_board[0], &y - &x[0], new_x, new_y);
-                        auto score = negamax(move_remaining == 1 ? 2 : 1, depth + (move_remaining == 2 ? 1 : 0)) * (move_remaining == 1 ? -1 : 1);
+                        auto score = negamax(move_remaining == 1 ? 2 : 1, depth + (move_remaining == 1 ? 1 : 0), 
+                            move_remaining == 2 ? alpha : -beta, move_remaining == 2 ? beta : -alpha) * (move_remaining == 1 ? -1 : 1);
                         best_score = std::max(best_score, score);
+                        alpha = std::max(alpha, score);
                         rollback_move();
+                        if(alpha >= beta) return best_score;
                     }
                 }
                 if(move_remaining == 1) continue;
-                auto& get_move_pattern_capture = (y == 1) ? pawn_capture_pattern[y] : move_pattern[y];
+                auto& get_move_pattern_capture = (std::abs(y) == 1) ? pawn_capture_pattern[y] : move_pattern[y];
                 for(auto& move: get_move_pattern_capture){
                     int new_x = (&x - &current_board[0]) + move.first;
                     int new_y = (&y - &x[0]) + move.second;
                     if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
                         if(current_board[new_x][new_y] == 0) continue;
                         make_capture(&x - &current_board[0], &y - &x[0], new_x, new_y);
-                        auto score = -negamax(2, depth + 1);
+                        auto score = -negamax(2, depth + 1, -beta, -alpha);
                         best_score = std::max(best_score, score);
+                        alpha = std::max(alpha, score);
                         rollback_move();
+                        if(alpha >= beta) return best_score;
                     }
                 }
             }
@@ -348,11 +361,6 @@ public:
 
         return best_score;
     }
-
-    /*auto clamp(auto&& negamax, float alpha = INF, float beta = NEGINF){
-        
-
-    }*/
 };
 
 
