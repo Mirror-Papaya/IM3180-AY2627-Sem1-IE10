@@ -11,7 +11,7 @@ using Hash = std::uint64_t;
 //use this when the board evaluation return actual float values instead of int
 // const float INF = FLT_MAX, NEGINF = -FLT_MAX;
 
-const int INF = INT32_MAX, NEGINF = INT32_MIN;
+const int INF = 1e9, NEGINF = -1e9;
 
 class Board{
 #ifdef BOARD_TESTING
@@ -164,14 +164,13 @@ public:
     }
 
     bool valid_move(int old_x, int old_y, int new_x, int new_y){
-        if(!inboard(new_x, new_y)) return false;
-        
-        if(!inboard(old_x, old_y)) return false;
+        if(!inboard(new_x, new_y) || !inboard(old_x, old_y)) return false;
         
         int piece = current_board[old_x][old_y];
-        
-        if(piece == 0) return false;
-        
+        if(!piece) return false; 
+        if(turn && piece > 0) return false;
+        if(!turn && piece < 0) return false;
+
         int destination_piece = current_board[new_x][new_y];
         
         if(destination_piece != 0 && (piece > 0) == (destination_piece > 0)) return false;
@@ -312,49 +311,36 @@ public:
     }
 
     auto negamax(int move_remaining, int depth){
-        if(move_remaining == 2 && depth == 30) return board_eval();
+        if(move_remaining == 2 && depth >= 30) return board_eval();
         if(check_game_ended()) return board_eval();
 
         int best_score = NEGINF;
 
         for(auto& x: current_board){
             for(auto& y: x){
-                if(!turn && y > 0){
-                    for(auto& move: move_pattern[y]){
-                        int new_x = (&x - &current_board[0]) + move.first;
-                        int new_y = (&y - &x[0]) + move.second;
-                        if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
-                            make_move(&x - &current_board[0], &y - &x[0], new_x, new_y);
-                            if(move_remaining == 2){
-                                auto score = -negamax(2, depth + 1);
-                                best_score = std::max(best_score, score);
-                                rollback_move();
-                            }
-                            if(move_remaining == 1){
-                                auto score = negamax(1, depth);
-                                best_score = std::max(best_score, score);
-                                rollback_move();
-                            }
-                        }
+                auto& get_move_pattern = (y == 1) ? pawn_move_pattern[y] : move_pattern[y];
+                for(auto& move: get_move_pattern){
+                    int new_x = (&x - &current_board[0]) + move.first;
+                    int new_y = (&y - &x[0]) + move.second;
+                    if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
+                        if(current_board[new_x][new_y] != 0) continue;
+                        make_move(&x - &current_board[0], &y - &x[0], new_x, new_y);
+                        auto score = negamax(move_remaining == 1 ? 2 : 1, depth + (move_remaining == 2 ? 1 : 0)) * (move_remaining == 1 ? -1 : 1);
+                        best_score = std::max(best_score, score);
+                        rollback_move();
                     }
                 }
-                else if(turn && y < 0){
-                    for(auto& move: move_pattern[y]){
-                        int new_x = (&x - &current_board[0]) + move.first;
-                        int new_y = (&y - &x[0]) + move.second;
-                        if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
-                            make_move(&x - &current_board[0], &y - &x[0], new_x, new_y);
-                            if(move_remaining == 2){
-                                auto score = -negamax(2, depth + 1);
-                                best_score = std::max(best_score, score);
-                                rollback_move();
-                            }
-                            if(move_remaining == 1){
-                                auto score = negamax(1, depth);
-                                best_score = std::max(best_score, score);
-                                rollback_move();
-                            }
-                        }
+                if(move_remaining == 1) continue;
+                auto& get_move_pattern_capture = (y == 1) ? pawn_capture_pattern[y] : move_pattern[y];
+                for(auto& move: get_move_pattern_capture){
+                    int new_x = (&x - &current_board[0]) + move.first;
+                    int new_y = (&y - &x[0]) + move.second;
+                    if(valid_move(&x - &current_board[0], &y - &x[0], new_x, new_y)){
+                        if(current_board[new_x][new_y] == 0) continue;
+                        make_capture(&x - &current_board[0], &y - &x[0], new_x, new_y);
+                        auto score = -negamax(2, depth + 1);
+                        best_score = std::max(best_score, score);
+                        rollback_move();
                     }
                 }
             }
