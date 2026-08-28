@@ -229,13 +229,24 @@ public:
 
         if(current_board[new_x][new_y]) { make_capture(old_x, old_y, new_x, new_y); return; }
 
+        int piece = current_board[old_x][old_y];
+        board_hash ^= piece_hash[piece * 64 + old_x * 8 + old_y];
+        board_hash ^= piece_hash[0 * 64 + old_x * 8 + old_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
+
         rollback.push_back(std::make_tuple(old_x, old_y, new_x, new_y, 
             current_board[new_x][new_y], this -> turn, this -> move_left));
 
-        current_board[new_x][new_y] = current_board[old_x][old_y];
+        current_board[new_x][new_y] = piece;
         current_board[old_x][old_y] = 0;
         --move_left;
         if(!move_left) turn = 1 - turn, move_left = 2;
+
+        board_hash ^= piece_hash[piece * 64 + new_x * 8 + new_y];
+        board_hash ^= piece_hash[0 * 64 + new_x * 8 + new_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
     }
 
     void make_capture(int old_x, int old_y, int new_x, int new_y){
@@ -246,14 +257,26 @@ public:
             return;
         }
 
-        rollback.push_back(std::make_tuple(old_x, old_y, new_x, new_y, 
-            current_board[new_x][new_y], this -> turn, this -> move_left));
-        
-        if(std::abs(current_board[new_x][new_y]) == 6) game_status = -1 * current_board[new_x][new_y] / 6;
+        int piece = current_board[old_x][old_y], captured_piece = current_board[new_x][new_y];
 
-        current_board[new_x][new_y] = current_board[old_x][old_y];
+        board_hash ^= piece_hash[piece * 64 + old_x * 8 + old_y];
+        board_hash ^= piece_hash[captured_piece * 64 + new_x * 8 + new_y];
+        board_hash ^= piece_hash[0 * 64 + old_x * 8 + old_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
+
+        rollback.push_back(std::make_tuple(old_x, old_y, new_x, new_y, 
+            captured_piece, this -> turn, this -> move_left));
+
+        if(std::abs(captured_piece) == 6) game_status = -1 * captured_piece / 6;
+
+        current_board[new_x][new_y] = piece;
         current_board[old_x][old_y] = 0;
         turn = 1 - turn;
+
+        board_hash ^= piece_hash[piece * 64 + new_x * 8 + new_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
     }
 
     auto board_eval(){
@@ -270,10 +293,22 @@ public:
         if(rollback.empty()) return;
         auto [old_x, old_y, new_x, new_y, captured_piece, old_turn, old_move_left] = rollback.back();
         rollback.pop_back();
+
+        board_hash ^= piece_hash[current_board[old_x][old_y] * 64 + old_x * 8 + old_y];
+        board_hash ^= piece_hash[current_board[new_x][new_y] * 64 + new_x * 8 + new_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
+
         current_board[old_x][old_y] = current_board[new_x][new_y];
         current_board[new_x][new_y] = captured_piece;
+        if(std::abs(captured_piece) == 6) game_status = 0;
         this -> turn = old_turn;
         this -> move_left = old_move_left;
+
+        board_hash ^= piece_hash[current_board[old_x][old_y] * 64 + old_x * 8 + old_y];
+        board_hash ^= piece_hash[current_board[new_x][new_y] * 64 + new_x * 8 + new_y];
+        board_hash ^= turn_hash[turn];
+        board_hash ^= move_left_hash[move_left];
     }
 
     auto negamax(int move_remaining, int depth){
