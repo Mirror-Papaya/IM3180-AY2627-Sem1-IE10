@@ -179,6 +179,14 @@ public:
         int dx = new_x - old_x;
         int dy = new_y - old_y;
         
+        if(piece == 3 || piece == -3 || piece == 4 || piece == -4 || piece == 5 || piece == -5){
+            int step_x = (dx > 0) - (dx < 0);
+            int step_y = (dy > 0) - (dy < 0);
+            for(int i = 1; i < std::max(std::abs(dx), std::abs(dy)); ++i){
+                if(current_board[old_x + i * step_x][old_y + i * step_y] != 0) return false;
+            }
+        }
+
         if(piece == 1 || piece == -1) {
             if(destination_piece == 0) {
                 auto& moves = pawn_move_pattern[piece];
@@ -255,7 +263,7 @@ public:
                 val += piece_value[j];
             }
         }
-        return val * (turn ? 1 : -1);
+        return val * (turn ? -1 : 1);
     }
 
     void rollback_move(){
