@@ -249,14 +249,97 @@ void Board::make_capture(int old_x, int old_y, int new_x, int new_y){
     board_hash ^= move_left_hash[move_left];
 }
 
-int Board::board_eval(){
-    int val = 0;
-    for(auto& i: current_board){
-        for(auto& j: i){
-            val += piece_value[j];
+int Board::board_eval() {
+
+    if (game_status != 0) {
+        int winner_score = (game_status > 0) ? 999999 : -999999;
+        return winner_score * (turn ? -1 : 1);
+    }
+
+    int raw_score = 0;
+    int pawn_count_white[8] = {0};
+    int pawn_count_black[8] = {0};
+
+    int white_king_x = -1, white_king_y = -1;
+    int black_king_x = -1, black_king_y = -1;
+
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            int piece = current_board[r][c];
+            if (piece == 0) continue;
+
+            int abs_p = std::abs(piece);
+            int mat = piece_value[abs_p];
+            int pst = 0;
+    
+            int sq_idx = (piece > 0) ? (r * 8 + c) : ((7 - r) * 8 + c); 
+
+            switch (abs_p) {
+                case 1: 
+                    pst = pawn_sq_table[sq_idx];
+                    if (piece > 0) pawn_count_white[c]++;
+                    else pawn_count_black[c]++;
+                    break;
+                case 2: 
+                    pst = knight_sq_table[sq_idx];
+                    break;
+                case 6: 
+                    pst = king_sq_table[sq_idx];
+                    if (piece > 0) { white_king_x = r; white_king_y = c; }
+                    else { black_king_x = r; black_king_y = c; }
+                    break;
+                default:
+                    break;
+            }
+
+            int total_piece_val = mat * 100 + (piece > 0 ? pst : -pst);
+            raw_score += total_piece_val;
         }
     }
-    return val * (turn ? -1 : 1);
+
+    for (int c = 0; c < 8; ++c) {
+        if (pawn_count_white[c] > 1) {
+            raw_score -= (pawn_count_white[c] - 1) * 20; 
+        }
+        if (pawn_count_white[c] > 0) {
+            bool left = (c > 0) && (pawn_count_white[c - 1] > 0);
+            bool right = (c < 7) && (pawn_count_white[c + 1] > 0);
+            if (!left && !right) raw_score -= 15; 
+        }
+
+        if (pawn_count_black[c] > 1) {
+            raw_score += (pawn_count_black[c] - 1) * 20;
+        }
+        if (pawn_count_black[c] > 0) {
+            bool left = (c > 0) && (pawn_count_black[c - 1] > 0);
+            bool right = (c < 7) && (pawn_count_black[c + 1] > 0);
+            if (!left && !right) raw_score += 15;
+        }
+    }
+
+    auto eval_shield = [&](int k_x, int k_y, int p_type) {
+        if (k_x == -1) return 0;
+        int shield_score = 0;
+        int forward_row = k_x + (p_type > 0 ? 1 : -1);
+
+        if (forward_row >= 0 && forward_row < 8) {
+            for (int dc = -1; dc <= 1; ++dc) {
+                int sc = k_y + dc;
+                if (sc >= 0 && sc < 8) {
+                    if (current_board[forward_row][sc] == p_type) {
+                        shield_score += 25; 
+                    }
+                }
+            }
+        }
+        return shield_score;
+    };
+
+    raw_score += eval_shield(white_king_x, white_king_y, 1);
+    raw_score -= eval_shield(black_king_x, black_king_y, -1);
+
+
+    return raw_score * (turn ? -1 : 1);
 }
 
 void Board::rollback_move(){
